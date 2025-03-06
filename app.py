@@ -98,9 +98,32 @@ if uploaded_file is not None:
 
 else:
     st.info("⬆️ Upload a CSV file to start analysis.")
+st.sidebar.header("🔍 Data Filtering")
+
+# Upload File
+uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv", "xlsx"])
+
+if uploaded_file is not None:
+    # Read the CSV or Excel file
+    try:
+        df = pd.read_csv(uploaded_file)  # Change to pd.read_excel(uploaded_file) for Excel files
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+        df = None  # Ensure df is not accessed if an error occurs
+
+    if df is not None:
+        # Check if the required column exists
+        if 'Category' in df.columns:
+            selected_category = st.sidebar.selectbox("Select Category", df['Category'].unique())
+            filtered_data = df[df['Category'] == selected_category]
+            st.write("Filtered Data", filtered_data)
+        else:
+            st.warning("⚠️ The uploaded file does not contain a 'Category' column.")
+else:
+    st.warning("⚠️ Please upload a CSV file first.")
     # Sidebar Filters
 selected_category = st.sidebar.selectbox("Select Category", df['Category'].unique())
-filtered_data = df[['Category'] == selected_category]
+filtered_data = df[df['Category'] == selected_category]
 
 st.write("Filtered Data", filtered_data)
 @st.cache_data
