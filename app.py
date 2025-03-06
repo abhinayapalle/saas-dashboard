@@ -5,6 +5,7 @@ import plotly.express as px
 from scipy.stats import zscore
 from prophet import Prophet
 import smtplib
+from textblob import TextBlob
 from email.mime.text import MIMEText
 
 # Function to send email alert
@@ -102,3 +103,11 @@ selected_category = st.sidebar.selectbox("Select Category", df['Category'].uniqu
 filtered_data = df[df['Category'] == selected_category]
 
 st.write("Filtered Data", filtered_data)
+@st.cache_data
+def load_data(file):
+    return pd.read_csv(file)
+
+df = load_data(uploaded_file)
+
+df['Sentiment'] = df['Review_Text'].apply(lambda x: TextBlob(str(x)).sentiment.polarity)
+st.write("Sentiment Analysis", df[['Review_Text', 'Sentiment']])
