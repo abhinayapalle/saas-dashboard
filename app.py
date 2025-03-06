@@ -68,6 +68,10 @@ if uploaded_file is not None:
 
 else:
     st.warning("⚠️ Please upload a CSV or XLSX file to proceed.")
+import streamlit as st
+import pandas as pd
+from prophet import Prophet
+
 # --- TIME-SERIES FORECASTING ---
 st.subheader("📈 Predictive Analytics (Forecasting)")
 
@@ -78,23 +82,39 @@ if uploaded_file:
         date_column = st.selectbox("Select Date Column:", date_columns)
         value_column = st.selectbox("Select Value Column:", [col for col in df.columns if col != date_column])
 
-        df[date_column] = pd.to_datetime(df[date_column])  # Convert to DateTime
-        df = df[[date_column, value_column]].rename(columns={date_column: "ds", value_column: "y"})
+        # ✅ Convert to DateTime format
+        df[date_column] = pd.to_datetime(df[date_column], errors="coerce")  
 
-        # ✅ Remove missing values
-        df = df.dropna(subset=["ds", "y"])
+        # ✅ Remove NaN values (invalid/missing dates)
+        df = df.dropna(subset=[date_column, value_column])
 
+        # ✅ Check if dataset is empty after cleaning
         if df.empty:
-            st.error("❌ No valid data available after removing NaN values.")
+            st.error("❌ No valid data available after cleaning. Please check your file.")
         else:
-            model = Prophet()
-            model.fit(df)
+            # ✅ Rename for Prophet
+            df = df.rename(columns={date_column: "ds", value_column: "y"})
 
-            period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
-            future = model.make_future_dataframe(periods=period)
-            forecast = model.predict(future)
+            # ✅ Ensure 'ds' is in correct format
+            df = df[df["ds"].notna()]  # Remove invalid dates
+            df = df[df["ds"].apply(lambda x: isinstance(x, pd.Timestamp))]  # Ensure proper date format
 
-            st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
-            st.line_chart(forecast.set_index("ds")["yhat"])
+            if df.empty:
+                st.error("❌ No valid date values found in the selected column.")
+            else:
+                # ✅ Prophet Model Training
+                model = Prophet()
+                model.fit(df)
+
+                period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
+                future = model.make_future_dataframe(periods=period)
+
+                # ✅ Ensure future data does not contain NaN dates
+                future = future.dropna()
+
+                # ✅ Make Predictions
+                forecast = model.predict(future)
+                st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
+                st.line_chart(forecast.set_index("ds")["yhat"])
     else:
         st.warning("⚠️ No date column found for forecasting.")
