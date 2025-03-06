@@ -100,7 +100,7 @@ else:
     st.info("⬆️ Upload a CSV file to start analysis.")
     # Sidebar Filters
 selected_category = st.sidebar.selectbox("Select Category", df['Category'].unique())
-filtered_data = df['Category'] == selected_category]
+filtered_data = df[['Category'] == selected_category]
 
 st.write("Filtered Data", filtered_data)
 @st.cache_data
