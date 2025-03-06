@@ -6,3 +6,4 @@ prophet
 openpyxl
 scikit-learn
 scipy
+textblob
