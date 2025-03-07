@@ -30,6 +30,34 @@ else:
 st.subheader("📌 Data Preview")
 st.write(df.head())
 
+# ========================== 🧠 Sentiment Analysis ==========================
+st.subheader("🧠 AI Sentiment Analysis")
+
+# Select a text column for sentiment analysis
+text_cols = df.select_dtypes(include=['object']).columns.tolist()
+if text_cols:
+    sentiment_col = st.selectbox("Select Text Column for Sentiment Analysis", text_cols)
+    
+    def analyze_sentiment(text):
+        score = sia.polarity_scores(text)['compound']
+        if score >= 0.05:
+            return "Positive"
+        elif score <= -0.05:
+            return "Negative"
+        else:
+            return "Neutral"
+
+    df['Sentiment'] = df[sentiment_col].astype(str).apply(analyze_sentiment)
+    
+    # Show sentiment distribution
+    st.write("### Sentiment Analysis Results")
+    st.write(df[[sentiment_col, "Sentiment"]].head())
+
+    fig_sentiment = px.histogram(df, x="Sentiment", title="Sentiment Distribution", color="Sentiment")
+    st.plotly_chart(fig_sentiment)
+else:
+    st.warning("⚠️ No text column found for sentiment analysis.")
+
 # ========================== 📊 Data Visualization (Without Date Column) ==========================
 st.subheader("📊 Data Visualizations")
 
@@ -58,6 +86,41 @@ if numerical_cols:
 
 else:
     st.warning("⚠️ No numerical columns found in the dataset for visualization.")
+
+# ========================== 🔮 AI Forecasting (Prophet) ==========================
+st.subheader("🔮 AI-Based Forecasting (Time Series Prediction)")
+
+# Check for a date column
+date_cols = df.select_dtypes(include=['datetime', 'object']).columns.tolist()
+
+if date_cols:
+    date_col = st.selectbox("Select Date Column for Forecasting", date_cols)
+    target_col = st.selectbox("Select Target Column to Predict", numerical_cols)
+
+    # Convert date column to datetime format
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+
+    # Prepare data for Prophet
+    forecast_df = df[[date_col, target_col]].rename(columns={date_col: "ds", target_col: "y"})
+
+    # Train the model
+    model = Prophet()
+    model.fit(forecast_df)
+
+    # Make future predictions
+    future = model.make_future_dataframe(periods=30)
+    forecast = model.predict(future)
+
+    # Plot predictions
+    fig_forecast = go.Figure()
+    fig_forecast.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat"], mode="lines", name="Predicted"))
+    fig_forecast.add_trace(go.Scatter(x=forecast_df["ds"], y=forecast_df["y"], mode="markers", name="Actual"))
+    fig_forecast.update_layout(title="Future Predictions", xaxis_title="Date", yaxis_title=target_col)
+
+    st.plotly_chart(fig_forecast)
+else:
+    st.warning("⚠️ No date column found. Please ensure your dataset contains a valid date column for AI-based forecasting.")
 
 # ========================== 🎯 Industry-Specific Dashboard Options ==========================
 st.sidebar.header("🎯 Industry Customization")
