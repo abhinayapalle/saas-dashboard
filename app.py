@@ -1,21 +1,21 @@
 import os
 import pandas as pd
 import streamlit as st
-from prophet import Prophet
 import plotly.express as px
 import plotly.graph_objects as go
-from nltk.sentiment import SentimentIntensityAnalyzer
+from prophet import Prophet
 import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
 
 # Download VADER lexicon for sentiment analysis
 nltk.download('vader_lexicon')
 sia = SentimentIntensityAnalyzer()
 
 # Streamlit UI
-st.set_page_config(page_title="SaaS Business Insights", layout="wide")
-st.title("📊 AI-Powered SaaS Dashboard")
+st.set_page_config(page_title="📊 AI-Powered SaaS Dashboard", layout="wide")
+st.title("📊 AI-Powered SaaS Business Insights")
 
-# File Upload Handling
+# ========================== 📂 File Upload Handling ==========================
 uploaded_file = st.file_uploader("Upload your CSV data file", type=["csv"])
 
 if uploaded_file is not None:
@@ -25,13 +25,15 @@ else:
     st.warning("⚠️ Please upload a CSV file to continue.")
     st.stop()
 
-# Display raw data preview
+# ========================== 📌 Data Preview ==========================
 st.subheader("📌 Data Preview")
 st.write(df.head())
 
-# Convert Date column (assuming it's named 'date') to datetime format
+# Ensure 'date' column exists
 if 'date' in df.columns:
     df['date'] = pd.to_datetime(df['date'])
+else:
+    st.warning("⚠️ The dataset does not contain a 'date' column. Some features may not work properly.")
 
 # ========================== 📈 AI-Powered Forecasting ==========================
 st.subheader("📈 AI-Powered Sales Forecasting")
@@ -40,7 +42,7 @@ if "date" in df.columns and "sales" in df.columns:
     forecast_period = st.slider("Select Forecasting Period (Days)", min_value=7, max_value=365, value=30)
     
     # Prepare data for Prophet
-    prophet_df = df[['date', 'sales']].rename(columns={"date": "ds", "sales": "y"})
+    prophet_df = df[['date', 'sales']].dropna().rename(columns={"date": "ds", "sales": "y"})
     
     # Train Prophet Model
     model = Prophet()
@@ -61,6 +63,7 @@ else:
 # ========================== 🧠 AI Sentiment Analysis ==========================
 st.subheader("🧠 AI Sentiment Analysis")
 
+# Let user select a text column
 text_col = st.selectbox("Select Text Column for Sentiment Analysis", df.columns)
 
 if text_col:
@@ -95,17 +98,30 @@ if "sales" in df.columns:
 # ========================== 📊 Data Visualization ==========================
 st.subheader("📊 Data Visualizations")
 
-# Line Chart
+# Line Chart for Sales Trends
 if "date" in df.columns and "sales" in df.columns:
     fig_line = px.line(df, x="date", y="sales", title="Sales Over Time")
     st.plotly_chart(fig_line)
 
-# Bar Chart
+# Bar Chart with Error Handling
 numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+
 if numerical_cols:
     bar_col = st.selectbox("Select Column for Bar Chart", numerical_cols)
-    fig_bar = px.bar(df, x="date", y=bar_col, title=f"{bar_col} Trends Over Time")
-    st.plotly_chart(fig_bar)
+
+    # Ensure data is clean before plotting
+    if bar_col in df.columns:
+        df.dropna(subset=[bar_col], inplace=True)  # Remove NaN values
+
+        if "date" in df.columns:
+            fig_bar = px.bar(df, x="date", y=bar_col, title=f"{bar_col} Trends Over Time")
+            st.plotly_chart(fig_bar)
+        else:
+            st.warning("⚠️ The dataset does not contain a 'date' column for visualization.")
+    else:
+        st.warning("⚠️ The selected column is not available in the dataset.")
+else:
+    st.warning("⚠️ No numeric columns found in the dataset.")
 
 # ========================== 🎯 Industry-Specific Dashboard Options ==========================
 st.sidebar.header("🎯 Industry Customization")
