@@ -1,11 +1,5 @@
-flask
-fastapi
+streamlit
 pandas
-numpy
-openai
 plotly
-dash
 prophet
-scikit-learn
-requests
-sqlalchemy
+nltk
