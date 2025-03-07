@@ -7,4 +7,4 @@ openpyxl
 scikit-learn
 scipy
 textblob
-transformers
+openai
