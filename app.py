@@ -1,110 +1,84 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 from prophet import Prophet
 from transformers import pipeline
-import numpy as np
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="SaaS Dashboard", layout="wide")
-
-# --- AI MODEL FOR TEXT ANALYSIS ---
-ai_model = pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english")
-
-def generate_ai_summary(text):
-    result = ai_model(text)
-    return result[0]["label"]
+# --- TITLE ---
+st.title("📊 SaaS Dashboard for Data Analysis")
 
 # --- FILE UPLOAD ---
-st.title("📊 SaaS Dashboard for Data Analysis")
-uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx"])
+st.sidebar.header("Upload Your Data")
+uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
 
 if uploaded_file:
-    file_extension = uploaded_file.name.split(".")[-1]
-    
-    # Read file
-    if file_extension == "csv":
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    df = pd.read_csv(uploaded_file)
 
-    st.write("### 🔍 Data Preview")
-    st.dataframe(df)
-
-    # --- DATA CLEANING ---
-    st.subheader("⚙️ Data Cleaning")
-    df = df.dropna()  # Remove missing values
-    df = df.drop_duplicates()  # Remove duplicate rows
-    st.write("✅ Data cleaned successfully!")
-
-    # --- DATA VISUALIZATION ---
-    st.subheader("📊 Data Visualization")
-    
-    numeric_columns = df.select_dtypes(include=["number"]).columns
-    if len(numeric_columns) >= 2:
-        x_axis = st.selectbox("Select X-axis", numeric_columns)
-        y_axis = st.selectbox("Select Y-axis", numeric_columns)
-        fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{x_axis} vs {y_axis}")
-        st.plotly_chart(fig)
-    else:
-        st.warning("❗ At least two numeric columns are required for visualization.")
+    # --- DATA PREVIEW ---
+    st.subheader("📜 Data Preview")
+    st.write(df.head())
 
     # --- ANOMALY DETECTION ---
     st.subheader("🚨 Anomaly Detection")
-    if len(numeric_columns) > 0:
-        selected_col = st.selectbox("Select Column for Anomaly Detection", numeric_columns)
-        
-        mean = df[selected_col].mean()
-        std_dev = df[selected_col].std()
+    numeric_columns = df.select_dtypes(include=np.number).columns.tolist()
 
-        df["Anomaly"] = (df[selected_col] < mean - 3 * std_dev) | (df[selected_col] > mean + 3 * std_dev)
-        anomalies = df[df["Anomaly"]]
+    if numeric_columns:
+        selected_column = st.selectbox("Select Numeric Column for Anomaly Detection", numeric_columns)
 
-        st.write(f"🔍 Detected {len(anomalies)} anomalies in `{selected_col}`")
-        st.dataframe(anomalies)
+        # Calculate Z-score
+        df["z_score"] = (df[selected_column] - df[selected_column].mean()) / df[selected_column].std()
+        df["Anomaly"] = df["z_score"].apply(lambda x: "Yes" if abs(x) > 2 else "No")
+
+        st.write(df[[selected_column, "z_score", "Anomaly"]])
+        fig = px.scatter(df, x=df.index, y=selected_column, color=df["Anomaly"])
+        st.plotly_chart(fig)
+
     else:
-        st.warning("❗ No numeric columns available for anomaly detection.")
+        st.warning("⚠️ No numeric columns found for anomaly detection.")
 
-    # --- PREDICTIVE ANALYTICS ---
+    # --- PREDICTIVE ANALYTICS (FORECASTING) ---
     st.subheader("🔮 Predictive Analytics (Forecasting)")
-    
-    date_columns = [col for col in df.columns if "date" in col.lower() or pd.api.types.is_datetime64_any_dtype(df[col])]
+    date_columns = [col for col in df.columns if "date" in col.lower()]
+
     if date_columns:
-        date_column = st.selectbox("Select Date Column:", date_columns)
-        value_column = st.selectbox("Select Value Column:", [col for col in numeric_columns if col != date_column])
+        date_column = st.selectbox("Select Date Column", date_columns)
+        value_column = st.selectbox("Select Value Column", [col for col in df.columns if col != date_column])
 
         # Convert to datetime
         df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
-        df = df.dropna(subset=[date_column, value_column])  # Remove NaN values
+        df = df.dropna(subset=[date_column, value_column])
+        df = df.rename(columns={date_column: "ds", value_column: "y"})
 
         if df.empty:
-            st.error("❌ No valid data available after cleaning.")
+            st.error("❌ No valid data after cleaning. Please check your file.")
         else:
-            # Rename for Prophet
-            df = df.rename(columns={date_column: "ds", value_column: "y"})
-            df = df[df["ds"].notna()]
-
-            # Train Prophet model
+            # Prophet Model
             model = Prophet()
             model.fit(df)
 
-            # Forecast future data
-            period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
+            period = st.slider("📅 Forecast Period (Days)", 7, 365, 30)
             future = model.make_future_dataframe(periods=period)
             forecast = model.predict(future)
 
-            st.write("🔮 Forecasted Data:")
-            st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
+            st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
             st.line_chart(forecast.set_index("ds")["yhat"])
+
     else:
-        st.warning("❗ No date columns found for forecasting.")
+        st.warning("⚠️ No date column found for forecasting.")
 
     # --- AI-POWERED INSIGHTS ---
     st.subheader("🤖 AI-Powered Insights")
-    user_input = st.text_area("Enter text for AI analysis:")
-    if user_input:
-        insights = generate_ai_summary(user_input)
-        st.write("🔍 AI Insight:", insights)
+    
+    # Load AI model
+    ai_model = pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english")
+
+    # Generate insights
+    sample_text = "The dataset contains trends over time, showing growth in key metrics."
+    ai_insights = ai_model(sample_text)
+
+    st.write("📝 AI Insights:", ai_insights)
 
 else:
-    st.warning("⚠️ Please upload a CSV or Excel file to start analysis.")
+    st.warning("⚠️ Please upload a CSV file to start analysis.")
+
