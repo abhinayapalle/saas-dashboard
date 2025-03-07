@@ -99,43 +99,28 @@ if date_cols:
 
     # Convert date column to datetime format
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df = df.dropna(subset=[date_col])
+    df = df.dropna(subset=[date_col, target_col])  # Remove rows with missing values
 
-    # Prepare data for Prophet
-    forecast_df = df[[date_col, target_col]].rename(columns={date_col: "ds", target_col: "y"})
+    if df.shape[0] < 2:
+        st.error("❌ Not enough valid rows for AI forecasting. Please check your data.")
+    else:
+        # Prepare data for Prophet
+        forecast_df = df[[date_col, target_col]].rename(columns={date_col: "ds", target_col: "y"})
 
-    # Train the model
-    model = Prophet()
-    model.fit(forecast_df)
+        # Train the model
+        model = Prophet()
+        model.fit(forecast_df)
 
-    # Make future predictions
-    future = model.make_future_dataframe(periods=30)
-    forecast = model.predict(future)
+        # Make future predictions
+        future = model.make_future_dataframe(periods=30)
+        forecast = model.predict(future)
 
-    # Plot predictions
-    fig_forecast = go.Figure()
-    fig_forecast.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat"], mode="lines", name="Predicted"))
-    fig_forecast.add_trace(go.Scatter(x=forecast_df["ds"], y=forecast_df["y"], mode="markers", name="Actual"))
-    fig_forecast.update_layout(title="Future Predictions", xaxis_title="Date", yaxis_title=target_col)
+        # Plot predictions
+        fig_forecast = go.Figure()
+        fig_forecast.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat"], mode="lines", name="Predicted"))
+        fig_forecast.add_trace(go.Scatter(x=forecast_df["ds"], y=forecast_df["y"], mode="markers", name="Actual"))
+        fig_forecast.update_layout(title="Future Predictions", xaxis_title="Date", yaxis_title=target_col)
 
-    st.plotly_chart(fig_forecast)
+        st.plotly_chart(fig_forecast)
 else:
     st.warning("⚠️ No date column found. Please ensure your dataset contains a valid date column for AI-based forecasting.")
-
-# ========================== 🎯 Industry-Specific Dashboard Options ==========================
-st.sidebar.header("🎯 Industry Customization")
-
-industry = st.sidebar.selectbox("Select Industry", ["E-commerce", "Healthcare", "Finance & Stock Market"])
-
-if industry == "E-commerce":
-    st.sidebar.write("🛒 Showing e-commerce insights (customer churn, order trends)")
-elif industry == "Healthcare":
-    st.sidebar.write("🏥 Showing healthcare insights (patient monitoring, drug stock tracking)")
-elif industry == "Finance & Stock Market":
-    st.sidebar.write("💰 Showing finance insights (portfolio tracking, fraud detection)")
-
-st.sidebar.write("✨ Customize insights based on industry needs!")
-
-st.sidebar.markdown("---")
-st.sidebar.info("📌 Built with Python, Streamlit, Plotly & AI!")
-
