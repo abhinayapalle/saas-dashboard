@@ -4,9 +4,9 @@ import plotly.express as px
 from prophet import Prophet
 from transformers import pipeline
 
-# --- Streamlit App Header ---
+# --- Set Streamlit Page Config ---
 st.set_page_config(page_title="📊 SaaS Dashboard", layout="wide")
-st.title("📊 SaaS Dashboard for Data Analysis & Forecasting")
+st.title("📊 SaaS Dashboard for Data Analysis & AI-Powered Insights")
 
 # --- Sidebar for File Upload ---
 st.sidebar.header("📂 Upload Your Data")
@@ -21,17 +21,37 @@ if uploaded_file:
 
     # --- AI Sentiment Analysis ---
     st.subheader("🧠 AI Sentiment Analysis")
-    sentiment_model = pipeline("sentiment-analysis")
+    try:
+        sentiment_model = pipeline("sentiment-analysis")
+        text_column = st.selectbox("Select Text Column for Sentiment Analysis", df.columns)
+        df["Sentiment"] = df[text_column].apply(lambda x: sentiment_model(str(x))[0]["label"])
+        st.dataframe(df[[text_column, "Sentiment"]])
+    except Exception as e:
+        st.error(f"⚠️ Sentiment Analysis Error: {e}")
 
-    text_column = st.selectbox("Select Text Column for Sentiment Analysis", df.columns)
-    df["Sentiment"] = df[text_column].apply(lambda x: sentiment_model(str(x))[0]["label"])
-    st.dataframe(df[["Sentiment"]])
+    # --- AI-Powered Summary ---
+    st.subheader("🧠 AI-Powered Data Insights")
+    try:
+        summary_model = pipeline("summarization")
+        summary_text = " ".join(df[text_column].astype(str).tolist())[:1000]  # Limit text for processing
+        summary = summary_model(summary_text, max_length=150, min_length=50, do_sample=False)[0]["summary_text"]
+        st.write("📌 AI Summary:", summary)
+    except Exception as e:
+        st.error(f"⚠️ AI Summary Error: {e}")
 
     # --- Data Visualization ---
     st.subheader("📊 Data Visualization")
     x_axis = st.selectbox("Select X-Axis", df.columns)
     y_axis = st.selectbox("Select Y-Axis", df.columns)
-    fig = px.bar(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
+    chart_type = st.selectbox("Select Chart Type", ["Bar Chart", "Line Chart", "Scatter Plot"])
+
+    if chart_type == "Bar Chart":
+        fig = px.bar(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
+    elif chart_type == "Line Chart":
+        fig = px.line(df, x=x_axis, y=y_axis, title=f"{y_axis} Over Time")
+    else:
+        fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
+
     st.plotly_chart(fig)
 
     # --- Time-Series Forecasting ---
@@ -55,25 +75,21 @@ if uploaded_file:
             if df.empty:
                 st.error("❌ No valid date values found in the selected column.")
             else:
-                model = Prophet()
-                model.fit(df)
+                try:
+                    model = Prophet()
+                    model.fit(df)
 
-                period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
-                future = model.make_future_dataframe(periods=period)
-                future = future.dropna()
+                    period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
+                    future = model.make_future_dataframe(periods=period)
+                    future = future.dropna()
 
-                forecast = model.predict(future)
-                st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
-                st.line_chart(forecast.set_index("ds")["yhat"])
+                    forecast = model.predict(future)
+                    st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
+                    st.line_chart(forecast.set_index("ds")["yhat"])
+                except Exception as e:
+                    st.error(f"⚠️ Forecasting Error: {e}")
     else:
         st.warning("❌ No date columns found.")
-
-    # --- AI Insights ---
-    st.subheader("🧠 AI-Powered Data Summary")
-    summary_model = pipeline("summarization")
-    summary_text = " ".join(df[text_column].astype(str).tolist())[:1000]  # Limit text for processing
-    summary = summary_model(summary_text, max_length=150, min_length=50, do_sample=False)[0]["summary_text"]
-    st.write("📌 AI Summary:", summary)
 
 else:
     st.warning("⚠️ Please upload a CSV or Excel file to proceed.")
