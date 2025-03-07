@@ -9,7 +9,6 @@ from textblob import TextBlob
 st.title("📊 AI-Powered SaaS Dashboard")
 
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
@@ -24,33 +23,13 @@ if uploaded_file is not None:
     if not numeric_cols:
         st.error("❌ No numeric columns found for visualization!")
     else:
-        # 📊 Multiple Data Visualizations
+        # 📊 Data Visualization (Without Date Column)
         st.subheader("📊 Data Visualization")
         selected_col = st.selectbox("Select Column to Visualize", numeric_cols)
+        fig_bar = px.bar(df, x=df.index, y=selected_col, title=f"{selected_col} Distribution")
+        st.plotly_chart(fig_bar)
 
-        # Select visualization type
-        viz_type = st.selectbox(
-            "Choose Visualization Type",
-            ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot"]
-        )
-
-        # Generate selected visualization
-        if viz_type == "Bar Chart":
-            fig = px.bar(df, x=df.index, y=selected_col, title=f"{selected_col} Distribution")
-        elif viz_type == "Line Chart":
-            fig = px.line(df, x=df.index, y=selected_col, title=f"{selected_col} Trend Over Time")
-        elif viz_type == "Scatter Plot":
-            fig = px.scatter(df, x=df.index, y=selected_col, title=f"{selected_col} Scatter Plot")
-        elif viz_type == "Pie Chart":
-            fig = px.pie(df, names=selected_col, title=f"{selected_col} Pie Chart")
-        elif viz_type == "Histogram":
-            fig = px.histogram(df, x=selected_col, title=f"{selected_col} Histogram")
-        elif viz_type == "Box Plot":
-            fig = px.box(df, y=selected_col, title=f"{selected_col} Box Plot")
-
-        st.plotly_chart(fig)
-
-    # 📌 AI Forecasting with Prophet
+    # 📌 AI Forecasting with Prophet (Handles Missing Values)
     st.subheader("📈 AI Forecasting")
     date_col = st.selectbox("Select Date Column", df.columns)
     target_col = st.selectbox("Select Column to Forecast", numeric_cols)
@@ -78,35 +57,12 @@ if uploaded_file is not None:
     # 📌 Sentiment Analysis
     st.subheader("🧠 AI Sentiment Analysis")
     text_columns = df.select_dtypes(include=['object']).columns.tolist()
-
     if text_columns:
         sentiment_col = st.selectbox("Select Text Column for Sentiment Analysis", text_columns)
-        df["Sentiment Score"] = df[sentiment_col].apply(lambda x: TextBlob(str(x)).sentiment.polarity)
-        df["Sentiment Label"] = df["Sentiment Score"].apply(lambda x: "😊 Positive" if x > 0 else "😠 Negative" if x < 0 else "😐 Neutral")
+        df["Sentiment"] = df[sentiment_col].apply(lambda x: TextBlob(str(x)).sentiment.polarity)
+        df["Sentiment_Label"] = df["Sentiment"].apply(lambda x: "Positive" if x > 0 else "Negative" if x < 0 else "Neutral")
 
-        # Display sentiment summary
-        sentiment_counts = df["Sentiment Label"].value_counts()
-        st.write("### Sentiment Summary")
-        st.write(sentiment_counts)
-
-        # Display sample positive & negative comments (only if available)
-        st.write("### Example Comments:")
-
-        positive_examples = df[df["Sentiment Score"] > 0][sentiment_col]
-        negative_examples = df[df["Sentiment Score"] < 0][sentiment_col]
-
-        if not positive_examples.empty:
-            st.write("✅ **Positive Example:**", positive_examples.sample(1, random_state=42).values[0])
-        else:
-            st.write("✅ **Positive Example:** No positive comments found.")
-
-        if not negative_examples.empty:
-            st.write("❌ **Negative Example:**", negative_examples.sample(1, random_state=42).values[0])
-        else:
-            st.write("❌ **Negative Example:** No negative comments found.")
-
-        # Sentiment Distribution Plot
-        fig_sentiment = px.histogram(df, x="Sentiment Label", title="Sentiment Distribution", color="Sentiment Label")
+        fig_sentiment = px.histogram(df, x="Sentiment_Label", title="Sentiment Distribution")
         st.plotly_chart(fig_sentiment)
     else:
         st.warning("⚠️ No text column found for sentiment analysis!")
