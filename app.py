@@ -23,13 +23,33 @@ if uploaded_file is not None:
     if not numeric_cols:
         st.error("❌ No numeric columns found for visualization!")
     else:
-        # 📊 Data Visualization (Without Date Column)
+        # 📊 Multiple Data Visualizations
         st.subheader("📊 Data Visualization")
         selected_col = st.selectbox("Select Column to Visualize", numeric_cols)
-        fig_bar = px.bar(df, x=df.index, y=selected_col, title=f"{selected_col} Distribution")
-        st.plotly_chart(fig_bar)
 
-    # 📌 AI Forecasting with Prophet (Handles Missing Values)
+        # Select visualization type
+        viz_type = st.selectbox(
+            "Choose Visualization Type",
+            ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot"]
+        )
+
+        # Generate selected visualization
+        if viz_type == "Bar Chart":
+            fig = px.bar(df, x=df.index, y=selected_col, title=f"{selected_col} Distribution")
+        elif viz_type == "Line Chart":
+            fig = px.line(df, x=df.index, y=selected_col, title=f"{selected_col} Trend Over Time")
+        elif viz_type == "Scatter Plot":
+            fig = px.scatter(df, x=df.index, y=selected_col, title=f"{selected_col} Scatter Plot")
+        elif viz_type == "Pie Chart":
+            fig = px.pie(df, names=selected_col, title=f"{selected_col} Pie Chart")
+        elif viz_type == "Histogram":
+            fig = px.histogram(df, x=selected_col, title=f"{selected_col} Histogram")
+        elif viz_type == "Box Plot":
+            fig = px.box(df, y=selected_col, title=f"{selected_col} Box Plot")
+
+        st.plotly_chart(fig)
+
+    # 📌 AI Forecasting with Prophet
     st.subheader("📈 AI Forecasting")
     date_col = st.selectbox("Select Date Column", df.columns)
     target_col = st.selectbox("Select Column to Forecast", numeric_cols)
