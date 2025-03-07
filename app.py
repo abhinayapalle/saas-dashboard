@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import openai
-from fbprophet import Prophet
+from prophet import Prophet
 from sklearn.ensemble import IsolationForest
 import requests
 import os
