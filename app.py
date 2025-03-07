@@ -1,76 +1,126 @@
-from flask import Flask, request, jsonify, render_template
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import openai
-from prophet import Prophet
-from sklearn.ensemble import IsolationForest
-import requests
 import os
+import pandas as pd
+import streamlit as st
+from prophet import Prophet
+import plotly.express as px
+import plotly.graph_objects as go
+from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
 
-# Initialize Flask app
-app = Flask(__name__)
-openai.api_key = "YOUR_OPENAI_API_KEY"  # Replace with your API key
+# Download VADER lexicon for sentiment analysis
+nltk.download('vader_lexicon')
+sia = SentimentIntensityAnalyzer()
 
-# Load sample sales dataset
-df = pd.read_csv("sales_data.csv")  # Your sales data file
+# Streamlit UI
+st.set_page_config(page_title="SaaS Business Insights", layout="wide")
+st.title("📊 AI-Powered SaaS Dashboard")
 
-def detect_anomalies(data):
-    """Detect anomalies using Isolation Forest."""
-    model = IsolationForest(contamination=0.05)
-    data['anomaly'] = model.fit_predict(data[['sales']])
-    anomalies = data[data['anomaly'] == -1]
-    return anomalies
+# File Upload Handling
+uploaded_file = st.file_uploader("Upload your CSV data file", type=["csv"])
 
-@app.route('/')
-def home():
-    return render_template("index.html")
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.success("✅ File uploaded successfully!")
+else:
+    st.warning("⚠️ Please upload a CSV file to continue.")
+    st.stop()
 
-@app.route('/dashboard', methods=['GET'])
-def dashboard():
-    """Return dashboard data (AI insights, charts)."""
-    anomalies = detect_anomalies(df)
-    fig = px.line(df, x='date', y='sales', title='Sales Trend')
-    return jsonify({
-        "chart": fig.to_json(),
-        "anomalies": anomalies.to_dict(orient='records')
-    })
+# Display raw data preview
+st.subheader("📌 Data Preview")
+st.write(df.head())
 
-@app.route('/nlq', methods=['POST'])
-def natural_language_query():
-    """Handle user queries and generate charts."""
-    user_query = request.json.get('query')
-    response = openai.Completion.create(
-        model="gpt-4",
-        prompt=f"Analyze the dataset and generate insights for: {user_query}",
-        max_tokens=100
-    )
-    return jsonify({"response": response['choices'][0]['text']})
+# Convert Date column (assuming it's named 'date') to datetime format
+if 'date' in df.columns:
+    df['date'] = pd.to_datetime(df['date'])
 
-@app.route('/forecast', methods=['GET'])
-def forecast():
-    """Predict future sales using Prophet."""
-    sales_data = df[['date', 'sales']]
-    sales_data.columns = ['ds', 'y']  # Prophet requires 'ds' (date) and 'y' (value)
+# ========================== 📈 AI-Powered Forecasting ==========================
+st.subheader("📈 AI-Powered Sales Forecasting")
+
+if "date" in df.columns and "sales" in df.columns:
+    forecast_period = st.slider("Select Forecasting Period (Days)", min_value=7, max_value=365, value=30)
+    
+    # Prepare data for Prophet
+    prophet_df = df[['date', 'sales']].rename(columns={"date": "ds", "sales": "y"})
+    
+    # Train Prophet Model
     model = Prophet()
-    model.fit(sales_data)
-    future = model.make_future_dataframe(periods=30)
+    model.fit(prophet_df)
+    
+    # Make Future Predictions
+    future = model.make_future_dataframe(periods=forecast_period)
     forecast = model.predict(future)
-    return forecast[['ds', 'yhat']].to_json(orient='records')
-
-@app.route('/alerts', methods=['POST'])
-def send_alert():
-    """Send an alert when anomalies are detected."""
-    alert_type = request.json.get('alert_type')
-    message = "Sales dropped significantly! Check your dashboard."
     
-    if alert_type == "email":
-        # Replace with actual email API
-        requests.post("https://api.emailservice.com/send", json={"to": "admin@example.com", "message": message})
-    elif alert_type == "slack":
-        requests.post("https://slack.com/api/chat.postMessage", json={"channel": "#alerts", "text": message})
-    
-    return jsonify({"status": "Alert Sent!"})
+    # Plot Forecast
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Predicted Sales'))
+    fig.add_trace(go.Scatter(x=prophet_df['ds'], y=prophet_df['y'], mode='markers', name='Actual Sales'))
+    st.plotly_chart(fig)
+else:
+    st.warning("⚠️ 'date' and 'sales' columns are required for forecasting.")
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# ========================== 🧠 AI Sentiment Analysis ==========================
+st.subheader("🧠 AI Sentiment Analysis")
+
+text_col = st.selectbox("Select Text Column for Sentiment Analysis", df.columns)
+
+if text_col:
+    df['sentiment_score'] = df[text_col].astype(str).apply(lambda text: sia.polarity_scores(text)['compound'])
+    df['sentiment_category'] = df['sentiment_score'].apply(lambda score: 
+        "Positive" if score > 0 else ("Negative" if score < 0 else "Neutral")
+    )
+    
+    # Display Sentiment Data
+    st.write(df[[text_col, "sentiment_score", "sentiment_category"]])
+    
+    # Sentiment Pie Chart
+    sentiment_counts = df['sentiment_category'].value_counts()
+    fig_pie = px.pie(names=sentiment_counts.index, values=sentiment_counts.values, title="Sentiment Distribution")
+    st.plotly_chart(fig_pie)
+
+# ========================== 🚨 Real-Time Alerts ==========================
+st.subheader("🚨 Real-Time Alerts & Notifications")
+
+alert_threshold = st.slider("Set Revenue Drop Alert Threshold (%)", min_value=5, max_value=50, value=10)
+
+if "sales" in df.columns:
+    df['daily_change'] = df['sales'].pct_change() * 100
+    alert_df = df[df['daily_change'] < -alert_threshold]
+
+    if not alert_df.empty:
+        st.error(f"⚠️ {len(alert_df)} instances detected where sales dropped by more than {alert_threshold}%!")
+        st.write(alert_df[['date', 'sales', 'daily_change']])
+    else:
+        st.success("✅ No significant revenue drops detected!")
+
+# ========================== 📊 Data Visualization ==========================
+st.subheader("📊 Data Visualizations")
+
+# Line Chart
+if "date" in df.columns and "sales" in df.columns:
+    fig_line = px.line(df, x="date", y="sales", title="Sales Over Time")
+    st.plotly_chart(fig_line)
+
+# Bar Chart
+numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+if numerical_cols:
+    bar_col = st.selectbox("Select Column for Bar Chart", numerical_cols)
+    fig_bar = px.bar(df, x="date", y=bar_col, title=f"{bar_col} Trends Over Time")
+    st.plotly_chart(fig_bar)
+
+# ========================== 🎯 Industry-Specific Dashboard Options ==========================
+st.sidebar.header("🎯 Industry Customization")
+
+industry = st.sidebar.selectbox("Select Industry", ["E-commerce", "Healthcare", "Finance & Stock Market"])
+
+if industry == "E-commerce":
+    st.sidebar.write("🛒 Showing e-commerce insights (customer churn, order trends)")
+elif industry == "Healthcare":
+    st.sidebar.write("🏥 Showing healthcare insights (patient monitoring, drug stock tracking)")
+elif industry == "Finance & Stock Market":
+    st.sidebar.write("💰 Showing finance insights (portfolio tracking, fraud detection)")
+
+st.sidebar.write("✨ Customize insights based on industry needs!")
+
+st.sidebar.markdown("---")
+st.sidebar.info("📌 Built with Python, Streamlit, Prophet, NLP, and AI!")
+
