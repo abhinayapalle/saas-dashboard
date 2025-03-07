@@ -2,109 +2,109 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from prophet import Prophet
-from textblob import TextBlob
+from transformers import pipeline
 import numpy as np
-import openai  # For AI-powered insights
 
-# --- STREAMLIT CONFIG ---
-st.set_page_config(page_title="SaaS Dashboard", layout="wide", page_icon="📊")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="SaaS Dashboard", layout="wide")
 
-# --- HEADER ---
-st.markdown(
-    """
-    <h1 style='text-align: center; color: #4CAF50;'>📊 AI-Powered SaaS Dashboard</h1>
-    <h4 style='text-align: center; color: gray;'>Get Real-time Insights, Forecasting & Anomaly Detection</h4>
-    """,
-    unsafe_allow_html=True,
-)
+# --- AI MODEL FOR TEXT ANALYSIS ---
+ai_model = pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english")
 
-st.sidebar.header("📂 Upload Your Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV/XLSX File", type=["csv", "xlsx"])
+def generate_ai_summary(text):
+    result = ai_model(text)
+    return result[0]["label"]
+
+# --- FILE UPLOAD ---
+st.title("📊 SaaS Dashboard for Data Analysis")
+uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file:
-    file_ext = uploaded_file.name.split(".")[-1]
-
-    if file_ext == "csv":
+    file_extension = uploaded_file.name.split(".")[-1]
+    
+    # Read file
+    if file_extension == "csv":
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
-    st.sidebar.success("✅ File uploaded successfully!")
+    st.write("### 🔍 Data Preview")
+    st.dataframe(df)
+
+    # --- DATA CLEANING ---
+    st.subheader("⚙️ Data Cleaning")
+    df = df.dropna()  # Remove missing values
+    df = df.drop_duplicates()  # Remove duplicate rows
+    st.write("✅ Data cleaned successfully!")
+
+    # --- DATA VISUALIZATION ---
+    st.subheader("📊 Data Visualization")
     
-    # --- DATA PREVIEW ---
-    st.subheader("📄 Data Preview")
-    st.write(df.head())
-
-    # --- AI-POWERED DATA INSIGHTS ---
-    st.subheader("🧠 AI-Powered Insights")
-
-    def generate_ai_summary(data):
-        prompt = f"Analyze the following dataset and provide key insights:\n{data.head().to_string()}\nSummarize in 3 bullet points."
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response["choices"][0]["message"]["content"]
-
-    if st.button("🔍 Generate AI Insights"):
-        with st.spinner("Analyzing data..."):
-            insights = generate_ai_summary(df)
-            st.write(insights)
+    numeric_columns = df.select_dtypes(include=["number"]).columns
+    if len(numeric_columns) >= 2:
+        x_axis = st.selectbox("Select X-axis", numeric_columns)
+        y_axis = st.selectbox("Select Y-axis", numeric_columns)
+        fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{x_axis} vs {y_axis}")
+        st.plotly_chart(fig)
+    else:
+        st.warning("❗ At least two numeric columns are required for visualization.")
 
     # --- ANOMALY DETECTION ---
     st.subheader("🚨 Anomaly Detection")
+    if len(numeric_columns) > 0:
+        selected_col = st.selectbox("Select Column for Anomaly Detection", numeric_columns)
+        
+        mean = df[selected_col].mean()
+        std_dev = df[selected_col].std()
 
-    numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
-    if numeric_columns:
-        column_to_check = st.selectbox("Select Column for Anomaly Detection:", numeric_columns)
+        df["Anomaly"] = (df[selected_col] < mean - 3 * std_dev) | (df[selected_col] > mean + 3 * std_dev)
+        anomalies = df[df["Anomaly"]]
 
-        df["z_score"] = (df[column_to_check] - df[column_to_check].mean()) / df[column_to_check].std()
-        df["Anomaly"] = df["z_score"].apply(lambda x: "Anomaly" if abs(x) > 3 else "Normal")
-
-        st.write("🔎 Detected Anomalies:")
-        st.write(df[df["Anomaly"] == "Anomaly"])
-
-        fig = px.scatter(df, x=df.index, y=column_to_check, color="Anomaly", title="Anomaly Detection")
-        st.plotly_chart(fig)
-
-        df.drop(columns=["z_score", "Anomaly"], inplace=True)
+        st.write(f"🔍 Detected {len(anomalies)} anomalies in `{selected_col}`")
+        st.dataframe(anomalies)
     else:
-        st.warning("⚠️ No numeric columns found for anomaly detection.")
+        st.warning("❗ No numeric columns available for anomaly detection.")
 
-    # --- PREDICTIVE ANALYTICS (FORECASTING) ---
-    st.subheader("🔮 Predictive Analytics (AI Forecasting)")
-
-    date_columns = [col for col in df.columns if pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower()]
+    # --- PREDICTIVE ANALYTICS ---
+    st.subheader("🔮 Predictive Analytics (Forecasting)")
     
+    date_columns = [col for col in df.columns if "date" in col.lower() or pd.api.types.is_datetime64_any_dtype(df[col])]
     if date_columns:
         date_column = st.selectbox("Select Date Column:", date_columns)
-        value_column = st.selectbox("Select Value Column:", [col for col in df.columns if col != date_column])
+        value_column = st.selectbox("Select Value Column:", [col for col in numeric_columns if col != date_column])
 
+        # Convert to datetime
         df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
-        df = df.dropna(subset=[date_column, value_column])
+        df = df.dropna(subset=[date_column, value_column])  # Remove NaN values
 
         if df.empty:
-            st.error("❌ No valid data available after cleaning. Please check your file.")
+            st.error("❌ No valid data available after cleaning.")
         else:
+            # Rename for Prophet
             df = df.rename(columns={date_column: "ds", value_column: "y"})
             df = df[df["ds"].notna()]
-            df = df[df["ds"].apply(lambda x: isinstance(x, pd.Timestamp))]
 
-            if df.empty:
-                st.error("❌ No valid date values found in the selected column.")
-            else:
-                model = Prophet()
-                model.fit(df)
+            # Train Prophet model
+            model = Prophet()
+            model.fit(df)
 
-                period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
-                future = model.make_future_dataframe(periods=period)
-                future = future.dropna()
+            # Forecast future data
+            period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
+            future = model.make_future_dataframe(periods=period)
+            forecast = model.predict(future)
 
-                forecast = model.predict(future)
-                st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
-                st.line_chart(forecast.set_index("ds")["yhat"])
+            st.write("🔮 Forecasted Data:")
+            st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
+            st.line_chart(forecast.set_index("ds")["yhat"])
     else:
-        st.warning("⚠️ No date column found for forecasting.")
+        st.warning("❗ No date columns found for forecasting.")
+
+    # --- AI-POWERED INSIGHTS ---
+    st.subheader("🤖 AI-Powered Insights")
+    user_input = st.text_area("Enter text for AI analysis:")
+    if user_input:
+        insights = generate_ai_summary(user_input)
+        st.write("🔍 AI Insight:", insights)
 
 else:
-    st.warning("⚠️ Please upload a CSV/XLSX file first.")
+    st.warning("⚠️ Please upload a CSV or Excel file to start analysis.")
