@@ -1,100 +1,76 @@
-import streamlit as st
+from flask import Flask, request, jsonify, render_template
 import pandas as pd
+import numpy as np
 import plotly.express as px
-from prophet import Prophet
-from transformers import pipeline
+import openai
+from fbprophet import Prophet
+from sklearn.ensemble import IsolationForest
+import requests
+import os
 
-# --- Set Streamlit Page Config ---
-st.set_page_config(page_title="📊 SaaS Dashboard", layout="wide")
-st.title("📊 SaaS Dashboard for Data Analysis & AI-Powered Insights")
+# Initialize Flask app
+app = Flask(__name__)
+openai.api_key = "YOUR_OPENAI_API_KEY"  # Replace with your API key
 
-# --- Sidebar for File Upload ---
-st.sidebar.header("📂 Upload Your Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV or Excel File", type=["csv", "xlsx"])
+# Load sample sales dataset
+df = pd.read_csv("sales_data.csv")  # Your sales data file
 
-if uploaded_file:
-    file_ext = uploaded_file.name.split(".")[-1]
-    df = pd.read_csv(uploaded_file) if file_ext == "csv" else pd.read_excel(uploaded_file)
+def detect_anomalies(data):
+    """Detect anomalies using Isolation Forest."""
+    model = IsolationForest(contamination=0.05)
+    data['anomaly'] = model.fit_predict(data[['sales']])
+    anomalies = data[data['anomaly'] == -1]
+    return anomalies
+
+@app.route('/')
+def home():
+    return render_template("index.html")
+
+@app.route('/dashboard', methods=['GET'])
+def dashboard():
+    """Return dashboard data (AI insights, charts)."""
+    anomalies = detect_anomalies(df)
+    fig = px.line(df, x='date', y='sales', title='Sales Trend')
+    return jsonify({
+        "chart": fig.to_json(),
+        "anomalies": anomalies.to_dict(orient='records')
+    })
+
+@app.route('/nlq', methods=['POST'])
+def natural_language_query():
+    """Handle user queries and generate charts."""
+    user_query = request.json.get('query')
+    response = openai.Completion.create(
+        model="gpt-4",
+        prompt=f"Analyze the dataset and generate insights for: {user_query}",
+        max_tokens=100
+    )
+    return jsonify({"response": response['choices'][0]['text']})
+
+@app.route('/forecast', methods=['GET'])
+def forecast():
+    """Predict future sales using Prophet."""
+    sales_data = df[['date', 'sales']]
+    sales_data.columns = ['ds', 'y']  # Prophet requires 'ds' (date) and 'y' (value)
+    model = Prophet()
+    model.fit(sales_data)
+    future = model.make_future_dataframe(periods=30)
+    forecast = model.predict(future)
+    return forecast[['ds', 'yhat']].to_json(orient='records')
+
+@app.route('/alerts', methods=['POST'])
+def send_alert():
+    """Send an alert when anomalies are detected."""
+    alert_type = request.json.get('alert_type')
+    message = "Sales dropped significantly! Check your dashboard."
     
-    st.write("✅ **Data Preview:**")
-    st.dataframe(df)
+    if alert_type == "email":
+        # Replace with actual email API
+        requests.post("https://api.emailservice.com/send", json={"to": "admin@example.com", "message": message})
+    elif alert_type == "slack":
+        requests.post("https://slack.com/api/chat.postMessage", json={"channel": "#alerts", "text": message})
+    
+    return jsonify({"status": "Alert Sent!"})
 
-    # --- AI Sentiment Analysis ---
-    st.subheader("🧠 AI Sentiment Analysis")
-    text_columns = [col for col in df.columns if df[col].dtype == 'O']  # Select only text columns
-
-    if text_columns:
-        text_column = st.selectbox("Select Text Column for Sentiment Analysis", text_columns)
-        sentiment_model = pipeline("sentiment-analysis")
-        df["Sentiment"] = df[text_column].apply(lambda x: sentiment_model(str(x))[0]["label"] if pd.notna(x) else "Neutral")
-        st.dataframe(df[[text_column, "Sentiment"]])
-    else:
-        st.warning("⚠️ No text columns available for sentiment analysis.")
-
-    # --- AI-Powered Summary ---
-    st.subheader("🧠 AI-Powered Data Insights")
-    if text_columns:
-        summary_model = pipeline("summarization")
-        summary_text = " ".join(df[text_column].astype(str).tolist())[:1000]  # Limit text for processing
-        summary = summary_model(summary_text, max_length=150, min_length=50, do_sample=False)[0]["summary_text"]
-        st.write("📌 AI Summary:", summary)
-    else:
-        st.warning("⚠️ No text columns available for summarization.")
-
-    # --- Data Visualization ---
-    st.subheader("📊 Data Visualization")
-    x_axis = st.selectbox("Select X-Axis", df.columns)
-    y_axis = st.selectbox("Select Y-Axis", df.columns)
-    chart_type = st.selectbox("Select Chart Type", ["Bar Chart", "Line Chart", "Scatter Plot"])
-
-    try:
-        if chart_type == "Bar Chart":
-            fig = px.bar(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
-        elif chart_type == "Line Chart":
-            fig = px.line(df, x=x_axis, y=y_axis, title=f"{y_axis} Over Time")
-        else:
-            fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
-
-        st.plotly_chart(fig)
-    except Exception as e:
-        st.error(f"⚠️ Visualization Error: {e}")
-
-    # --- Time-Series Forecasting ---
-    st.subheader("📈 Predictive Analytics (Forecasting)")
-    date_columns = [col for col in df.columns if pd.api.types.is_datetime64_any_dtype(df[col]) or "date" in col.lower()]
-
-    if date_columns:
-        date_column = st.selectbox("Select Date Column:", date_columns)
-        value_column = st.selectbox("Select Value Column:", [col for col in df.columns if col != date_column])
-
-        df[date_column] = pd.to_datetime(df[date_column], errors="coerce")
-        df = df.dropna(subset=[date_column, value_column])
-
-        if df.empty:
-            st.error("❌ No valid data available after cleaning. Please check your file.")
-        else:
-            df = df.rename(columns={date_column: "ds", value_column: "y"})
-            df = df[df["ds"].notna()]
-            df = df[df["ds"].apply(lambda x: isinstance(x, pd.Timestamp))]
-
-            if df.empty:
-                st.error("❌ No valid date values found in the selected column.")
-            else:
-                try:
-                    model = Prophet()
-                    model.fit(df)
-
-                    period = st.slider("📅 Select Forecast Period (Days)", 7, 365, 30)
-                    future = model.make_future_dataframe(periods=period)
-                    future = future.dropna()
-
-                    forecast = model.predict(future)
-                    st.write("🔮 Forecasted Data:", forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]])
-                    st.line_chart(forecast.set_index("ds")["yhat"])
-                except Exception as e:
-                    st.error(f"⚠️ Forecasting Error: {e}")
-    else:
-        st.warning("❌ No date columns found.")
-
-else:
-    st.warning("⚠️ Please upload a CSV or Excel file to proceed.")
+if __name__ == '__main__':
+    app.run(debug=True)
