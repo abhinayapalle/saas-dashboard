@@ -9,3 +9,6 @@ scipy
 textblob
 openai
 transformers
+torch 
+torchvision 
+torchaudio
