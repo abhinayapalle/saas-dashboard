@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from prophet import Prophet
 from sklearn.ensemble import IsolationForest
-from transformers import pipeline  # Replacing OpenAI with Hugging Face AI
+from transformers import pipeline  # AI-powered insights
 
 # --- Streamlit UI Config ---
 st.set_page_config(page_title="SaaS Dashboard", layout="wide")
@@ -32,15 +32,6 @@ if uploaded_file:
     if not categorical_columns.empty:
         selected_category = st.sidebar.selectbox("Select Category", categorical_columns)
     
-    # --- AI Insights (Sentiment Analysis) ---
-    st.subheader("🤖 AI-Powered Insights")
-
-    sentiment_analyzer = pipeline("sentiment-analysis")
-    text_data = st.text_area("Enter text for AI Analysis:")
-    if text_data:
-        result = sentiment_analyzer(text_data)
-        st.write("🔍 Sentiment Analysis Result:", result)
-
     # --- Anomaly Detection ---
     st.subheader("🚨 Anomaly Detection")
 
@@ -85,6 +76,15 @@ if uploaded_file:
                 st.line_chart(forecast.set_index("ds")["yhat"])
     else:
         st.warning("⚠️ Please include a date column for forecasting.")
+
+    # --- AI Insights using Transformers ---
+    st.subheader("🤖 AI-Powered Insights")
+    ai_model = pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english")
+
+    user_input = st.text_area("Enter text for AI analysis:")
+    if user_input:
+        prediction = ai_model(user_input)
+        st.write("🔍 Sentiment Analysis:", prediction[0]["label"])
 
 else:
     st.warning("⚠️ Please upload a CSV file first.")
