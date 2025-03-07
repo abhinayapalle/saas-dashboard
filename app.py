@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from prophet import Prophet
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
+from textblob import TextBlob
 
 # Download VADER lexicon for sentiment analysis
 nltk.download('vader_lexicon')
@@ -67,14 +68,21 @@ st.subheader("🧠 AI Sentiment Analysis")
 text_col = st.selectbox("Select Text Column for Sentiment Analysis", df.columns)
 
 if text_col:
-    df['sentiment_score'] = df[text_col].astype(str).apply(lambda text: sia.polarity_scores(text)['compound'])
-    df['sentiment_category'] = df['sentiment_score'].apply(lambda score: 
+    # Ensure column is string type
+    df[text_col] = df[text_col].astype(str)
+
+    # Compute Sentiment Scores
+    df['vader_sentiment'] = df[text_col].apply(lambda text: sia.polarity_scores(text)['compound'])
+    df['textblob_sentiment'] = df[text_col].apply(lambda text: TextBlob(text).sentiment.polarity)
+
+    # Assign Sentiment Category
+    df['sentiment_category'] = df['vader_sentiment'].apply(lambda score: 
         "Positive" if score > 0 else ("Negative" if score < 0 else "Neutral")
     )
-    
+
     # Display Sentiment Data
-    st.write(df[[text_col, "sentiment_score", "sentiment_category"]])
-    
+    st.write(df[[text_col, "vader_sentiment", "textblob_sentiment", "sentiment_category"]])
+
     # Sentiment Pie Chart
     sentiment_counts = df['sentiment_category'].value_counts()
     fig_pie = px.pie(names=sentiment_counts.index, values=sentiment_counts.values, title="Sentiment Distribution")
