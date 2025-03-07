@@ -21,23 +21,25 @@ if uploaded_file:
 
     # --- AI Sentiment Analysis ---
     st.subheader("🧠 AI Sentiment Analysis")
-    try:
+    text_columns = [col for col in df.columns if df[col].dtype == 'O']  # Select only text columns
+
+    if text_columns:
+        text_column = st.selectbox("Select Text Column for Sentiment Analysis", text_columns)
         sentiment_model = pipeline("sentiment-analysis")
-        text_column = st.selectbox("Select Text Column for Sentiment Analysis", df.columns)
-        df["Sentiment"] = df[text_column].apply(lambda x: sentiment_model(str(x))[0]["label"])
+        df["Sentiment"] = df[text_column].apply(lambda x: sentiment_model(str(x))[0]["label"] if pd.notna(x) else "Neutral")
         st.dataframe(df[[text_column, "Sentiment"]])
-    except Exception as e:
-        st.error(f"⚠️ Sentiment Analysis Error: {e}")
+    else:
+        st.warning("⚠️ No text columns available for sentiment analysis.")
 
     # --- AI-Powered Summary ---
     st.subheader("🧠 AI-Powered Data Insights")
-    try:
+    if text_columns:
         summary_model = pipeline("summarization")
         summary_text = " ".join(df[text_column].astype(str).tolist())[:1000]  # Limit text for processing
         summary = summary_model(summary_text, max_length=150, min_length=50, do_sample=False)[0]["summary_text"]
         st.write("📌 AI Summary:", summary)
-    except Exception as e:
-        st.error(f"⚠️ AI Summary Error: {e}")
+    else:
+        st.warning("⚠️ No text columns available for summarization.")
 
     # --- Data Visualization ---
     st.subheader("📊 Data Visualization")
@@ -45,14 +47,17 @@ if uploaded_file:
     y_axis = st.selectbox("Select Y-Axis", df.columns)
     chart_type = st.selectbox("Select Chart Type", ["Bar Chart", "Line Chart", "Scatter Plot"])
 
-    if chart_type == "Bar Chart":
-        fig = px.bar(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
-    elif chart_type == "Line Chart":
-        fig = px.line(df, x=x_axis, y=y_axis, title=f"{y_axis} Over Time")
-    else:
-        fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
+    try:
+        if chart_type == "Bar Chart":
+            fig = px.bar(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
+        elif chart_type == "Line Chart":
+            fig = px.line(df, x=x_axis, y=y_axis, title=f"{y_axis} Over Time")
+        else:
+            fig = px.scatter(df, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
 
-    st.plotly_chart(fig)
+        st.plotly_chart(fig)
+    except Exception as e:
+        st.error(f"⚠️ Visualization Error: {e}")
 
     # --- Time-Series Forecasting ---
     st.subheader("📈 Predictive Analytics (Forecasting)")
