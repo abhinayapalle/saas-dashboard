@@ -3,3 +3,8 @@ pandas
 plotly
 prophet
 nltk
+scikit-learn
+openai
+langchain
+matplotlib
+seaborn
