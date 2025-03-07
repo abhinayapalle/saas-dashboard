@@ -74,15 +74,27 @@ if uploaded_file is not None:
 
         st.plotly_chart(fig_forecast)
 
-    # 📌 Sentiment Analysis
+    # 📌 Improved Sentiment Analysis
     st.subheader("🧠 AI Sentiment Analysis")
     text_columns = df.select_dtypes(include=['object']).columns.tolist()
+
     if text_columns:
         sentiment_col = st.selectbox("Select Text Column for Sentiment Analysis", text_columns)
-        df["Sentiment"] = df[sentiment_col].apply(lambda x: TextBlob(str(x)).sentiment.polarity)
-        df["Sentiment_Label"] = df["Sentiment"].apply(lambda x: "Positive" if x > 0 else "Negative" if x < 0 else "Neutral")
+        df["Sentiment Score"] = df[sentiment_col].apply(lambda x: TextBlob(str(x)).sentiment.polarity)
+        df["Sentiment Label"] = df["Sentiment Score"].apply(lambda x: "😊 Positive" if x > 0 else "😠 Negative" if x < 0 else "😐 Neutral")
 
-        fig_sentiment = px.histogram(df, x="Sentiment_Label", title="Sentiment Distribution")
+        # Display sentiment summary
+        sentiment_counts = df["Sentiment Label"].value_counts()
+        st.write("### Sentiment Summary")
+        st.write(sentiment_counts)
+
+        # Display sample positive & negative comments
+        st.write("### Example Comments:")
+        st.write("✅ **Positive Example:**", df[df["Sentiment Score"] > 0][sentiment_col].sample(1, random_state=42).values[0])
+        st.write("❌ **Negative Example:**", df[df["Sentiment Score"] < 0][sentiment_col].sample(1, random_state=42).values[0])
+
+        # Sentiment Distribution Plot
+        fig_sentiment = px.histogram(df, x="Sentiment Label", title="Sentiment Distribution", color="Sentiment Label")
         st.plotly_chart(fig_sentiment)
     else:
         st.warning("⚠️ No text column found for sentiment analysis!")
